@@ -10,6 +10,7 @@ class FirstApp(cmd2.Cmd):
 
     def __init__(self):
         super().__init__()
+        self.current_directory = os.getcwd()  # Ruta actual al iniciar la shell
 
         # Make maxrepeats settable at runtime
         self.maxrepeats = 3
@@ -74,13 +75,20 @@ class FirstApp(cmd2.Cmd):
     copy_parser.add_argument('destination', help='Archivo o directorio de destino')
 
     @cmd2.with_argparser(copy_parser)
-    def do_copiar(self, args): #comando: copiar
+    def do_copiar(self, args): # comando: copiar
         """Copia un archivo o directorio al destino especificado."""
+        source_path = os.path.abspath(os.path.join(self.current_directory, args.source))
+        destination_path = os.path.abspath(os.path.join(self.current_directory, args.destination))
+
         try:
-            shutil.copy(args.source, args.destination)
-            self.poutput(f"Copiado {args.source} a {args.destination}.")
+            if os.path.exists(source_path):
+                shutil.copy(source_path, destination_path)
+                self.poutput(f"Copiado {source_path} a {destination_path}.")
+            else:
+                self.perror(f"El archivo o directorio {args.source} no existe.")
         except Exception as e:
             self.perror(f"Error al copiar: {e}")
+
 
     # Comando para mover archivos
     move_parser = cmd2.Cmd2ArgumentParser()
@@ -88,13 +96,20 @@ class FirstApp(cmd2.Cmd):
     move_parser.add_argument('destination', help='Archivo o directorio de destino')
 
     @cmd2.with_argparser(move_parser)
-    def do_mover(self, args): #comando: mover
+    def do_mover(self, args): # comando: mover
         """Mueve un archivo o directorio al destino especificado."""
+        source_path = os.path.abspath(os.path.join(self.current_directory, args.source))
+        destination_path = os.path.abspath(os.path.join(self.current_directory, args.destination))
+
         try:
-            shutil.move(args.source, args.destination)
-            self.poutput(f"Movido {args.source} a {args.destination}.")
+            if os.path.exists(source_path):
+                shutil.move(source_path, destination_path)
+                self.poutput(f"Movido {source_path} a {destination_path}.")
+            else:
+                self.perror(f"El archivo o directorio {args.source} no existe.")
         except Exception as e:
             self.perror(f"Error al mover: {e}")
+
 
     # Comando para renombrar archivos
     rename_parser = cmd2.Cmd2ArgumentParser()
@@ -102,28 +117,50 @@ class FirstApp(cmd2.Cmd):
     rename_parser.add_argument('new_name', help='Nuevo nombre del archivo o directorio')
 
     @cmd2.with_argparser(rename_parser)
-    def do_renombrar(self, args): #comando: renombrar
+    def do_renombrar(self, args): # comando: renombrar
         """Renombra un archivo o directorio."""
+        source_path = os.path.abspath(os.path.join(self.current_directory, args.source))
+        new_name_path = os.path.abspath(os.path.join(self.current_directory, args.new_name))
+
         try:
-            os.rename(args.source, args.new_name)
-            self.poutput(f"Renombrado {args.source} a {args.new_name}.")
+            if os.path.exists(source_path):
+                os.rename(source_path, new_name_path)
+                self.poutput(f"Renombrado {source_path} a {new_name_path}.")
+            else:
+                self.perror(f"El archivo o directorio {args.source} no existe.")
         except Exception as e:
             self.perror(f"Error al renombrar: {e}")
 
+
     # Comando para listar directorios
     list_parser = cmd2.Cmd2ArgumentParser()
-    list_parser.add_argument('directory', nargs='?', default='.', help='Directorio a listar (por defecto: actual)')
+    list_parser.add_argument('directory', nargs='?', default='', help='Directorio a listar (por defecto: actual)')
 
     @cmd2.with_argparser(list_parser)
-    def do_listar(self, args): #comando: listar
+    def do_listar(self, args): # comando: listar
         """Lista el contenido de un directorio."""
+        directory_to_list = os.path.abspath(os.path.join(self.current_directory, args.directory))
         try:
-            entries = os.listdir(args.directory)
+            entries = os.listdir(directory_to_list)
             for entry in entries:
                 self.poutput(entry)
         except Exception as e:
             self.perror(f"Error al listar el directorio: {e}")
 
+    # Comando para cambiar de directorio
+    change_dir_parser = cmd2.Cmd2ArgumentParser()
+    change_dir_parser.add_argument('directory', help='Ruta del directorio al que desea cambiar')
+
+    @cmd2.with_argparser(change_dir_parser)
+    def do_ir(self, args): # comando: ir
+        """Cambia al directorio especificado."""
+        new_directory = os.path.abspath(os.path.join(self.current_directory, args.directory))
+        if os.path.isdir(new_directory):  # Verifica si el directorio existe
+            self.current_directory = new_directory  # Actualiza la ruta actual
+            self.poutput(f"Directorio cambiado a: {self.current_directory}")
+        else:
+            self.perror(f"El directorio {args.directory} no existe.")
+    # comando: ir . para volver al directorio actual y ir.. para volver a la ruta padre
 
 if __name__ == '__main__':
     import sys
