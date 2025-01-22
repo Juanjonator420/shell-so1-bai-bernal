@@ -4,6 +4,13 @@ import cmd2
 import argparse
 import os
 import shutil
+import pwd
+import grp
+import subprocess
+import json
+
+# Archivo para almacenar la información de los usuarios
+USERS_FILE = 'usuarios.json'
 
 class FirstApp(cmd2.Cmd):
     """A simple cmd2 application."""
@@ -161,6 +168,115 @@ class FirstApp(cmd2.Cmd):
         else:
             self.perror(f"El directorio {args.directory} no existe.")
     # comando: ir . para volver al directorio actual y ir.. para volver a la ruta padre
+
+
+    # Comando para cambiar permisos de archivos
+    permissions_parser = cmd2.Cmd2ArgumentParser()
+    permissions_parser.add_argument('mode', help='Permisos en formato octal (e.g., 755)')
+    permissions_parser.add_argument('files', nargs='+', help='Archivos o directorios a los que cambiar los permisos')
+
+    @cmd2.with_argparser(permissions_parser)
+    def do_permisos(self, args):  # comando: permisos
+        """Cambia los permisos de un archivo o conjunto de archivos."""
+        try:
+            mode = int(args.mode, 8)  # Convierte los permisos octales a entero
+            for file in args.files:
+                file_path = os.path.abspath(os.path.join(self.current_directory, file))
+                if os.path.exists(file_path):
+                    os.chmod(file_path, mode)
+                    self.poutput(f"Permisos de {file_path} cambiados a {args.mode}.")
+                else:
+                    self.perror(f"El archivo o directorio {file} no existe.")
+        except ValueError:
+            self.perror("El modo de permisos debe estar en formato octal (por ejemplo: 755).")
+        except Exception as e:
+            self.perror(f"Error al cambiar permisos: {e}")
+
+
+    # Comando para cambiar propietario y grupo de archivos
+    owner_parser = cmd2.Cmd2ArgumentParser()
+    owner_parser.add_argument('owner', help='Nuevo propietario (nombre de usuario o UID)')
+    owner_parser.add_argument('group', help='Nuevo grupo (nombre del grupo o GID)')
+    owner_parser.add_argument('files', nargs='+', help='Archivos o directorios a los que cambiar el propietario')
+
+    @cmd2.with_argparser(owner_parser)
+    def do_propietario(self, args):  # comando: propietario
+        """Cambia el propietario y grupo de un archivo o conjunto de archivos."""
+        try:
+            # Obtiene UID y GID
+            uid = int(args.owner) if args.owner.isdigit() else pwd.getpwnam(args.owner).pw_uid
+            gid = int(args.group) if args.group.isdigit() else grp.getgrnam(args.group).gr_gid
+
+            for file in args.files:
+                file_path = os.path.abspath(os.path.join(self.current_directory, file))
+                if os.path.exists(file_path):
+                    os.chown(file_path, uid, gid)
+                    self.poutput(f"Propietario y grupo de {file_path} cambiados a {args.owner}:{args.group}.")
+                else:
+                    self.perror(f"El archivo o directorio {file} no existe.")
+        except KeyError:
+            self.perror("El propietario o grupo no existen.")
+        except Exception as e:
+            self.perror(f"Error al cambiar propietario: {e}")
+
+
+    # Comando para cambiar la contraseña de un usuario
+    password_parser = cmd2.Cmd2ArgumentParser()
+    password_parser.add_argument('username', help='Nombre de usuario para cambiar la contraseña')
+
+    @cmd2.with_argparser(password_parser)
+    def do_contraseña(self, args):  # comando: contraseña
+        """Cambia la contraseña de un usuario."""
+        try:
+            # Llama al comando del sistema para cambiar la contraseña
+            result = subprocess.run(['passwd', args.username], check=True)
+            if result.returncode == 0:
+                self.poutput(f"Contraseña para {args.username} cambiada correctamente.")
+            else:
+                self.perror(f"Error al cambiar la contraseña de {args.username}.")
+        except subprocess.CalledProcessError as e:
+            self.perror(f"Error al ejecutar el comando: {e}")
+        except Exception as e:
+            self.perror(f"Error inesperado: {e}")
+
+
+    # Comando para agregar usuarios
+    user_parser = cmd2.Cmd2ArgumentParser()
+    user_parser.add_argument('username', help='Nombre del nuevo usuario')
+    user_parser.add_argument('-n', '--nombre', required=True, help='Nombre completo del usuario')
+    user_parser.add_argument('-H', '--horario', required=True, help='Horario de trabajo del usuario')  # Cambiado -h a -H
+    user_parser.add_argument('-l', '--lugares', nargs='+', default=['localhost'], help='Posibles lugares de conexión (IPs o localhost)')
+
+    @cmd2.with_argparser(user_parser)
+    def do_usuario(self, args):  # comando: usuario
+        """Agrega un nuevo usuario y registra sus datos personales."""
+        try:
+            subprocess.run(['useradd', args.username], check=True)
+
+            user_data = {
+                'username': args.username,
+                'nombre': args.nombre,
+                'horario': args.horario,
+                'lugares': args.lugares
+            }
+
+            if os.path.exists(USERS_FILE):
+                with open(USERS_FILE, 'r') as f:
+                    users = json.load(f)
+            else:
+                users = {}
+
+            users[args.username] = user_data
+
+            with open(USERS_FILE, 'w') as f:
+                json.dump(users, f, indent=4)
+
+            self.poutput(f"Usuario {args.username} agregado correctamente.")
+        except subprocess.CalledProcessError as e:
+            self.perror(f"Error al agregar el usuario {args.username}: {e}")
+        except Exception as e:
+            self.perror(f"Error inesperado: {e}")
+
 
 if __name__ == '__main__':
     import sys
