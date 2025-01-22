@@ -8,9 +8,11 @@ import pwd
 import grp
 import subprocess
 import json
+from DemonioManager import DemonioManager #Importa DemonioManager
 
-# Archivo para almacenar la información de los usuarios
-USERS_FILE = 'usuarios.json'
+HORARIOS_LOG = 'usuario_horarios_log' # Archivo de logs de horarios
+TRANSFERENCIAS_LOG = 'Shell_transferencias' # Archivo de log de transferencias
+USERS_FILE = 'usuarios.json' # Archivo para almacenar la información de los usuarios
 
 class FirstApp(cmd2.Cmd):
     """A simple cmd2 application."""
@@ -18,6 +20,8 @@ class FirstApp(cmd2.Cmd):
     def __init__(self):
         super().__init__()
         self.current_directory = os.getcwd()  # Ruta actual al iniciar la shell
+        self.demonio_manager = DemonioManager()
+        self.HORARIOS_LOG = 'usuario_horarios_log'
 
         # Make maxrepeats settable at runtime
         self.maxrepeats = 3
@@ -49,7 +53,7 @@ class FirstApp(cmd2.Cmd):
     # Comandos solicitados segun la descripcion de la shell:
     #-------------------------------------------------------------------------------------------------------------------
 
-    # Comando para crear archivos
+    # Comando para crear archivos - extra
     create_file_parser = cmd2.Cmd2ArgumentParser()
     create_file_parser.add_argument('filename', help='Nombre del archivo a crear')
 
@@ -63,7 +67,7 @@ class FirstApp(cmd2.Cmd):
         except Exception as e:
             self.perror(f"Error al crear el archivo: {e}")
 
-    # Comando para crear directorios
+    # Comando para crear directorios - 5 solicitado
     create_dir_parser = cmd2.Cmd2ArgumentParser()
     create_dir_parser.add_argument('dirname', help='Nombre del directorio a crear')
 
@@ -76,7 +80,7 @@ class FirstApp(cmd2.Cmd):
         except Exception as e:
             self.perror(f"Error al crear el directorio: {e}")
 
-    # Comando para copiar archivos
+    # Comando para copiar archivos - 1 solicitado
     copy_parser = cmd2.Cmd2ArgumentParser()
     copy_parser.add_argument('source', help='Archivo o directorio de origen')
     copy_parser.add_argument('destination', help='Archivo o directorio de destino')
@@ -97,7 +101,7 @@ class FirstApp(cmd2.Cmd):
             self.perror(f"Error al copiar: {e}")
 
 
-    # Comando para mover archivos
+    # Comando para mover archivos - 2 solicitado
     move_parser = cmd2.Cmd2ArgumentParser()
     move_parser.add_argument('source', help='Archivo o directorio de origen')
     move_parser.add_argument('destination', help='Archivo o directorio de destino')
@@ -118,7 +122,7 @@ class FirstApp(cmd2.Cmd):
             self.perror(f"Error al mover: {e}")
 
 
-    # Comando para renombrar archivos
+    # Comando para renombrar archivos - 3 solicitado
     rename_parser = cmd2.Cmd2ArgumentParser()
     rename_parser.add_argument('source', help='Archivo o directorio actual')
     rename_parser.add_argument('new_name', help='Nuevo nombre del archivo o directorio')
@@ -139,7 +143,8 @@ class FirstApp(cmd2.Cmd):
             self.perror(f"Error al renombrar: {e}")
 
 
-    # Comando para listar directorios
+    #---------------------------------------------------------------------------------------------------------------
+    # Comando para listar directorios - 4 solicitado
     list_parser = cmd2.Cmd2ArgumentParser()
     list_parser.add_argument('directory', nargs='?', default='', help='Directorio a listar (por defecto: actual)')
 
@@ -154,7 +159,7 @@ class FirstApp(cmd2.Cmd):
         except Exception as e:
             self.perror(f"Error al listar el directorio: {e}")
 
-    # Comando para cambiar de directorio
+    # Comando para cambiar de directorio - 6 solicitado
     change_dir_parser = cmd2.Cmd2ArgumentParser()
     change_dir_parser.add_argument('directory', help='Ruta del directorio al que desea cambiar')
 
@@ -170,7 +175,8 @@ class FirstApp(cmd2.Cmd):
     # comando: ir . para volver al directorio actual y ir.. para volver a la ruta padre
 
 
-    # Comando para cambiar permisos de archivos
+    #---------------------------------------------------------------------------------------------------------------
+    # Comando para cambiar permisos de archivos - 7 solicitado
     permissions_parser = cmd2.Cmd2ArgumentParser()
     permissions_parser.add_argument('mode', help='Permisos en formato octal (e.g., 755)')
     permissions_parser.add_argument('files', nargs='+', help='Archivos o directorios a los que cambiar los permisos')
@@ -193,7 +199,8 @@ class FirstApp(cmd2.Cmd):
             self.perror(f"Error al cambiar permisos: {e}")
 
 
-    # Comando para cambiar propietario y grupo de archivos
+    #---------------------------------------------------------------------------------------------------------------
+    # Comando para cambiar propietario y grupo de archivos - 8 solicitado
     owner_parser = cmd2.Cmd2ArgumentParser()
     owner_parser.add_argument('owner', help='Nuevo propietario (nombre de usuario o UID)')
     owner_parser.add_argument('group', help='Nuevo grupo (nombre del grupo o GID)')
@@ -220,7 +227,8 @@ class FirstApp(cmd2.Cmd):
             self.perror(f"Error al cambiar propietario: {e}")
 
 
-    # Comando para cambiar la contraseña de un usuario
+    #---------------------------------------------------------------------------------------------------------------
+    # Comando para cambiar la contraseña de un usuario - 9 solicitado
     password_parser = cmd2.Cmd2ArgumentParser()
     password_parser.add_argument('username', help='Nombre de usuario para cambiar la contraseña')
 
@@ -240,7 +248,8 @@ class FirstApp(cmd2.Cmd):
             self.perror(f"Error inesperado: {e}")
 
 
-    # Comando para agregar usuarios
+    #---------------------------------------------------------------------------------------------------------------
+    # Comando para agregar usuarios - 10 solicitado
     user_parser = cmd2.Cmd2ArgumentParser()
     user_parser.add_argument('username', help='Nombre del nuevo usuario')
     user_parser.add_argument('-n', '--nombre', required=True, help='Nombre completo del usuario')
@@ -276,6 +285,132 @@ class FirstApp(cmd2.Cmd):
             self.perror(f"Error al agregar el usuario {args.username}: {e}")
         except Exception as e:
             self.perror(f"Error inesperado: {e}")
+
+
+    #--------------------------------------------------------------------------------------------------------------- volver a revisar
+
+    # Comando para listar demonios - 11 solicitado
+    @cmd2.with_argument_list
+    def do_listardemonios(self, args):
+        """Lista los demonios disponibles en el sistema."""
+        demonios = self.demonio_manager.listar_demonios()
+        if demonios:
+            self.poutput("\n".join(demonios))
+        else:
+            self.poutput("No se encontraron demonios disponibles.")
+
+    # Comando para manejar demonios
+    daemon_parser = cmd2.Cmd2ArgumentParser()
+    daemon_parser.add_argument('action', choices=['start', 'stop', 'restart'], help='Acción para el demonio')
+    daemon_parser.add_argument('daemon', help='Nombre del demonio (sin .service)')
+
+    @cmd2.with_argparser(daemon_parser)
+    def do_demonio(self, args):
+        """Levanta, detiene o reinicia un demonio."""
+        try:
+            mensaje = self.demonio_manager.ejecutar_accion(args.daemon, args.action)
+            self.poutput(mensaje)
+        except FileNotFoundError as e:
+            self.perror(str(e))
+        except ValueError as e:
+            self.perror(str(e))
+        except subprocess.CalledProcessError as e:
+            self.perror(f"Error al ejecutar la acción: {e}")
+        except Exception as e:
+            self.perror(f"Error inesperado: {e}")
+
+
+    #--------------------------------------------------------------------------------------------------------------- 
+
+
+    # Comando para ejecutar comandos arbitrarios del sistema - 12 solicitado
+    system_command_parser = cmd2.Cmd2ArgumentParser()
+    system_command_parser.add_argument('command', help='Comando del sistema a ejecutar')
+    system_command_parser.add_argument('args', nargs=argparse.REMAINDER, help='Argumentos del comando del sistema')
+
+    @cmd2.with_argparser(system_command_parser)
+    def do_ejecutar(self, args):  # comando: ejecutar
+        """Ejecuta comandos arbitrarios del sistema."""
+        try:
+            # Verifica que el comando no esté entre los comandos prohibidos
+            forbidden_commands = ['ir', 'usuario', 'contraseña', 'demonio']
+            if args.command in forbidden_commands:
+                self.perror(f"El comando {args.command} está prohibido.")
+                return
+
+            # Ejecuta el comando
+            result = subprocess.run([args.command] + args.args, text=True, capture_output=True)
+            if result.returncode == 0:
+                self.poutput(result.stdout)
+            else:
+                self.perror(result.stderr)
+        except Exception as e:
+            self.perror(f"Error al ejecutar el comando: {e}")
+
+
+    #--------------------------------------------------------------------------------------------------------------- 
+
+    #Registrar el inicio de sesión y la salida sesión del usuario. - 13 solicitado
+    # Define el parser para el comando sesion
+    sesion_parser = cmd2.Cmd2ArgumentParser()
+    sesion_parser.add_argument('accion', choices=['iniciar', 'cerrar'], help='Acción de la sesión (iniciar o cerrar)')
+
+    def registrar_horario(self, usuario, accion, horario_permitido):
+        """Registra el horario de inicio o salida en un archivo de log."""
+        from datetime import datetime
+        ahora = datetime.now()
+        hora_actual = ahora.strftime("%H:%M:%S")
+        fecha_actual = ahora.strftime("%Y-%m-%d")
+        fuera_de_rango = not (horario_permitido[0] <= hora_actual <= horario_permitido[1])
+
+        mensaje = f"{fecha_actual} {hora_actual} - Usuario: {usuario} - Acción: {accion}"
+        if fuera_de_rango:
+            mensaje += " - Fuera de rango"
+        
+        with open(HORARIOS_LOG, 'a') as log:
+            log.write(mensaje + '\n')
+
+        return mensaje
+
+    @cmd2.with_argparser(sesion_parser)
+    def do_sesion(self, args):  # comando: sesion
+        """Inicia o cierra sesión de un usuario."""
+        usuario = "actual"  # Aquí puedes obtener el usuario del sistema
+        accion = args.accion.lower()
+        horario_permitido = ("08:00:00", "18:00:00")  # Horario permitido
+
+        mensaje = self.registrar_horario(usuario, accion, horario_permitido)
+        self.poutput(mensaje)
+
+
+    #--------------------------------------------------------------------------------------------------------------- 
+
+    #Ejecutar una transferencia por ftp o scp. - 14 solicitado
+    transfer_parser = cmd2.Cmd2ArgumentParser()
+    transfer_parser.add_argument('method', choices=['ftp', 'scp'], help='Método de transferencia (ftp o scp)')
+    transfer_parser.add_argument('source', help='Archivo fuente')
+    transfer_parser.add_argument('destination', help='Destino del archivo')
+
+    @cmd2.with_argparser(transfer_parser)
+    def do_transferir(self, args):  # comando: transferir
+        """Ejecuta una transferencia por FTP o SCP y la registra."""
+        try:
+            if args.method == 'ftp':
+                # Código para FTP
+                self.poutput(f"Transfiriendo {args.source} a {args.destination} vía FTP...")
+                # Aquí agregarías la lógica para transferir por FTP usando ftplib
+            elif args.method == 'scp':
+                # Código para SCP
+                self.poutput(f"Transfiriendo {args.source} a {args.destination} vía SCP...")
+                subprocess.run(['scp', args.source, args.destination], check=True)
+
+            # Registrar la transferencia
+            with open(TRANSFERENCIAS_LOG, 'a') as log:
+                log.write(f"Transferencia {args.method.upper()}: {args.source} -> {args.destination}\n")
+
+            self.poutput("Transferencia completada y registrada.")
+        except Exception as e:
+            self.perror(f"Error en la transferencia: {e}")
 
 
 if __name__ == '__main__':

@@ -1,0 +1,11 @@
+{
+    "boopbeep": {
+        "username": "boopbeep",
+        "nombre": "Juan Bai",
+        "horario": "8:00-17:00",
+        "lugares": [
+            "192.168.0.1",
+            "localhost"
+        ]
+    }
+}
