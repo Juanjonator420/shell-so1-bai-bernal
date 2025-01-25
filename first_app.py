@@ -8,11 +8,15 @@ import pwd
 import grp
 import subprocess
 import json
+from datetime import datetime
+from ftplib import FTP
 from DemonioManager import DemonioManager #Importa DemonioManager
 
 HORARIOS_LOG = 'usuario_horarios_log' # Archivo de logs de horarios
 TRANSFERENCIAS_LOG = 'Shell_transferencias' # Archivo de log de transferencias
 USERS_FILE = 'usuarios.json' # Archivo para almacenar la información de los usuarios
+HISTORIAL_LOG = 'historial_comandos.log'  # Archivo de log para comandos
+ERROR_LOG = 'errores.log'  # Archivo de log para errores
 
 class FirstApp(cmd2.Cmd):
     """A simple cmd2 application."""
@@ -21,11 +25,134 @@ class FirstApp(cmd2.Cmd):
         super().__init__()
         self.current_directory = os.getcwd()  # Ruta actual al iniciar la shell
         self.demonio_manager = DemonioManager()
-        self.HORARIOS_LOG = 'usuario_horarios_log'
+        self.demonio_manager.add_demonio('virusreloco')  # Agrega un demonio de ejemplo
+        self.demonio_manager.add_demonio('leagueofleyends')  # Otro demonio de ejemplo
+
+        # Registrar hooks para comandos y errores
+        self.register_postcmd_hook(self._log_command)
 
         # Make maxrepeats settable at runtime
         self.maxrepeats = 3
         self.add_settable(cmd2.Settable('maxrepeats', int, 'max repetitions for speak command', self))
+
+    #--------------------------------------------------------------------------------------------------------------------
+    #Historial de comandos y errores
+
+    def _log_command(self, data: cmd2.plugin.PostcommandData) -> cmd2.plugin.PostcommandData:
+        """Registra cada comando ejecutado."""
+        command = data.statement.raw
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(HISTORIAL_LOG, 'a') as log:
+            log.write(f"[{timestamp}] Comando ejecutado: {command}\n")
+        return data
+
+    def _log_error(self, message):
+        """Registra errores en el archivo de errores."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(ERROR_LOG, 'a') as log:
+            log.write(f"[{timestamp}] ERROR: {message}\n")
+
+    def perror(self, msg, *, end='\n', apply_style=True):
+        """Sobrescribe perror para registrar errores en el archivo de errores."""
+        # Llama al método original de cmd2 para manejar el mensaje
+        super().perror(msg, end=end, apply_style=apply_style)
+
+        # Registra el error en el archivo de errores
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(ERROR_LOG, 'a') as log:
+            log.write(f"[{timestamp}] ERROR: {msg}\n")
+
+
+    # Ejemplo de comandos:
+
+    # Comando para listar directorios
+    list_parser = cmd2.Cmd2ArgumentParser()
+    list_parser.add_argument('directory', nargs='?', default='', help='Directorio a listar (por defecto: actual)')
+
+    @cmd2.with_argparser(list_parser)
+    def do_listar(self, args):
+        """Lista el contenido de un directorio."""
+        directory_to_list = os.path.abspath(args.directory or self.current_directory)
+        try:
+            entries = os.listdir(directory_to_list)
+            for entry in entries:
+                self.poutput(entry)
+        except PermissionError:
+            self.perror("Acceso denegado al directorio especificado.")
+        except FileNotFoundError:
+            self.perror("El directorio especificado no existe.")
+        except Exception as e:
+            self.perror(f"Error inesperado: {e}")
+
+    # Comando para copiar archivos
+    copy_parser = cmd2.Cmd2ArgumentParser()
+    copy_parser.add_argument('source', help='Archivo o directorio de origen')
+    copy_parser.add_argument('destination', help='Archivo o directorio de destino')
+
+    @cmd2.with_argparser(copy_parser)
+    def do_copiar(self, args):
+        """Copia un archivo o directorio al destino especificado."""
+        try:
+            shutil.copy(args.source, args.destination)
+            self.poutput(f"Archivo {args.source} copiado a {args.destination}.")
+        except FileNotFoundError:
+            self.perror("El archivo de origen no existe.")
+        except PermissionError:
+            self.perror("No tienes permisos para copiar el archivo.")
+        except Exception as e:
+            self.perror(f"Error al copiar el archivo: {e}")
+
+    # Comando para renombrar archivos
+    rename_parser = cmd2.Cmd2ArgumentParser()
+    rename_parser.add_argument('source', help='Archivo o directorio actual')
+    rename_parser.add_argument('new_name', help='Nuevo nombre del archivo o directorio')
+
+    @cmd2.with_argparser(rename_parser)
+    def do_renombrar(self, args):
+        """Renombra un archivo o directorio."""
+        try:
+            os.rename(args.source, args.new_name)
+            self.poutput(f"Archivo {args.source} renombrado a {args.new_name}.")
+        except FileNotFoundError:
+            self.perror("El archivo o directorio especificado no existe.")
+        except PermissionError:
+            self.perror("No tienes permisos para renombrar este archivo o directorio.")
+        except Exception as e:
+            self.perror(f"Error al renombrar: {e}")
+
+    # Comando para cambiar la contraseña de un usuario
+    password_parser = cmd2.Cmd2ArgumentParser()
+    password_parser.add_argument('username', help='Nombre de usuario para cambiar la contraseña')
+
+    @cmd2.with_argparser(password_parser)
+    def do_contraseña(self, args):
+        """Cambia la contraseña de un usuario."""
+        try:
+            result = subprocess.run(['passwd', args.username], check=True)
+            if result.returncode == 0:
+                self.poutput(f"Contraseña cambiada correctamente para el usuario {args.username}.")
+        except subprocess.CalledProcessError:
+            self.perror(f"Error al intentar cambiar la contraseña para {args.username}.")
+        except Exception as e:
+            self.perror(f"Error inesperado al cambiar contraseña: {e}")
+
+    # Comando para verificar el estado de un servicio
+    service_parser = cmd2.Cmd2ArgumentParser()
+    service_parser.add_argument('service', help='Nombre del servicio a verificar')
+
+    @cmd2.with_argparser(service_parser)
+    def do_estado(self, args):
+        """Verifica si un servicio está inicializado."""
+        try:
+            result = subprocess.run(['systemctl', 'status', args.service], text=True, capture_output=True)
+            if "active (running)" in result.stdout:
+                self.poutput(f"El servicio {args.service} está en ejecución.")
+            else:
+                self.perror(f"El servicio {args.service} no está inicializado.")
+        except FileNotFoundError:
+            self.perror("El comando 'systemctl' no está disponible en este sistema.")
+        except Exception as e:
+            self.perror(f"Error al verificar el estado del servicio: {e}")
 
     # Comandos básicos de prueba:
     #--------------------------------------------------------------------------------------------------------------------
@@ -80,26 +207,6 @@ class FirstApp(cmd2.Cmd):
         except Exception as e:
             self.perror(f"Error al crear el directorio: {e}")
 
-    # Comando para copiar archivos - 1 solicitado
-    copy_parser = cmd2.Cmd2ArgumentParser()
-    copy_parser.add_argument('source', help='Archivo o directorio de origen')
-    copy_parser.add_argument('destination', help='Archivo o directorio de destino')
-
-    @cmd2.with_argparser(copy_parser)
-    def do_copiar(self, args): # comando: copiar
-        """Copia un archivo o directorio al destino especificado."""
-        source_path = os.path.abspath(os.path.join(self.current_directory, args.source))
-        destination_path = os.path.abspath(os.path.join(self.current_directory, args.destination))
-
-        try:
-            if os.path.exists(source_path):
-                shutil.copy(source_path, destination_path)
-                self.poutput(f"Copiado {source_path} a {destination_path}.")
-            else:
-                self.perror(f"El archivo o directorio {args.source} no existe.")
-        except Exception as e:
-            self.perror(f"Error al copiar: {e}")
-
 
     # Comando para mover archivos - 2 solicitado
     move_parser = cmd2.Cmd2ArgumentParser()
@@ -122,42 +229,9 @@ class FirstApp(cmd2.Cmd):
             self.perror(f"Error al mover: {e}")
 
 
-    # Comando para renombrar archivos - 3 solicitado
-    rename_parser = cmd2.Cmd2ArgumentParser()
-    rename_parser.add_argument('source', help='Archivo o directorio actual')
-    rename_parser.add_argument('new_name', help='Nuevo nombre del archivo o directorio')
-
-    @cmd2.with_argparser(rename_parser)
-    def do_renombrar(self, args): # comando: renombrar
-        """Renombra un archivo o directorio."""
-        source_path = os.path.abspath(os.path.join(self.current_directory, args.source))
-        new_name_path = os.path.abspath(os.path.join(self.current_directory, args.new_name))
-
-        try:
-            if os.path.exists(source_path):
-                os.rename(source_path, new_name_path)
-                self.poutput(f"Renombrado {source_path} a {new_name_path}.")
-            else:
-                self.perror(f"El archivo o directorio {args.source} no existe.")
-        except Exception as e:
-            self.perror(f"Error al renombrar: {e}")
-
 
     #---------------------------------------------------------------------------------------------------------------
-    # Comando para listar directorios - 4 solicitado
-    list_parser = cmd2.Cmd2ArgumentParser()
-    list_parser.add_argument('directory', nargs='?', default='', help='Directorio a listar (por defecto: actual)')
-
-    @cmd2.with_argparser(list_parser)
-    def do_listar(self, args): # comando: listar
-        """Lista el contenido de un directorio."""
-        directory_to_list = os.path.abspath(os.path.join(self.current_directory, args.directory))
-        try:
-            entries = os.listdir(directory_to_list)
-            for entry in entries:
-                self.poutput(entry)
-        except Exception as e:
-            self.perror(f"Error al listar el directorio: {e}")
+ 
 
     # Comando para cambiar de directorio - 6 solicitado
     change_dir_parser = cmd2.Cmd2ArgumentParser()
@@ -228,24 +302,7 @@ class FirstApp(cmd2.Cmd):
 
 
     #---------------------------------------------------------------------------------------------------------------
-    # Comando para cambiar la contraseña de un usuario - 9 solicitado
-    password_parser = cmd2.Cmd2ArgumentParser()
-    password_parser.add_argument('username', help='Nombre de usuario para cambiar la contraseña')
 
-    @cmd2.with_argparser(password_parser)
-    def do_contraseña(self, args):  # comando: contraseña
-        """Cambia la contraseña de un usuario."""
-        try:
-            # Llama al comando del sistema para cambiar la contraseña
-            result = subprocess.run(['passwd', args.username], check=True)
-            if result.returncode == 0:
-                self.poutput(f"Contraseña para {args.username} cambiada correctamente.")
-            else:
-                self.perror(f"Error al cambiar la contraseña de {args.username}.")
-        except subprocess.CalledProcessError as e:
-            self.perror(f"Error al ejecutar el comando: {e}")
-        except Exception as e:
-            self.perror(f"Error inesperado: {e}")
 
 
     #---------------------------------------------------------------------------------------------------------------
@@ -289,35 +346,28 @@ class FirstApp(cmd2.Cmd):
 
     #--------------------------------------------------------------------------------------------------------------- volver a revisar
 
-    # Comando para listar demonios - 11 solicitado
-    @cmd2.with_argument_list
-    def do_listardemonios(self, args):
-        """Lista los demonios disponibles en el sistema."""
-        demonios = self.demonio_manager.listar_demonios()
-        if demonios:
-            self.poutput("\n".join(demonios))
-        else:
-            self.poutput("No se encontraron demonios disponibles.")
-
-    # Comando para manejar demonios
+    #Comando para manejar demonios
     daemon_parser = cmd2.Cmd2ArgumentParser()
-    daemon_parser.add_argument('action', choices=['start', 'stop', 'restart'], help='Acción para el demonio')
-    daemon_parser.add_argument('daemon', help='Nombre del demonio (sin .service)')
+    daemon_parser.add_argument('action', choices=['start', 'stop', 'restart', 'list'], help='Acción para el demonio')
+    daemon_parser.add_argument('name', nargs='?', default='', help='Nombre del demonio (opcional para listar)')
 
     @cmd2.with_argparser(daemon_parser)
     def do_demonio(self, args):
-        """Levanta, detiene o reinicia un demonio."""
-        try:
-            mensaje = self.demonio_manager.ejecutar_accion(args.daemon, args.action)
-            self.poutput(mensaje)
-        except FileNotFoundError as e:
-            self.perror(str(e))
-        except ValueError as e:
-            self.perror(str(e))
-        except subprocess.CalledProcessError as e:
-            self.perror(f"Error al ejecutar la acción: {e}")
-        except Exception as e:
-            self.perror(f"Error inesperado: {e}")
+        """Gestiona los demonios simulados."""
+        if args.action == 'list':
+            demonios = self.demonio_manager.list_demonios()
+            if demonios:
+                self.poutput("Demonios disponibles:")
+                for demonio in demonios:
+                    self.poutput(f" - {demonio}")
+            else:
+                self.poutput("No hay demonios registrados.")
+        elif args.action == 'start':
+            self.poutput(self.demonio_manager.start_demonio(args.name))
+        elif args.action == 'stop':
+            self.poutput(self.demonio_manager.stop_demonio(args.name))
+        elif args.action == 'restart':
+            self.poutput(self.demonio_manager.restart_demonio(args.name))
 
 
     #--------------------------------------------------------------------------------------------------------------- 
@@ -390,27 +440,46 @@ class FirstApp(cmd2.Cmd):
     transfer_parser.add_argument('method', choices=['ftp', 'scp'], help='Método de transferencia (ftp o scp)')
     transfer_parser.add_argument('source', help='Archivo fuente')
     transfer_parser.add_argument('destination', help='Destino del archivo')
+    transfer_parser.add_argument('--host', help='Host del servidor FTP o SCP', required=True)
+    transfer_parser.add_argument('--user', help='Usuario para autenticar', required=True)
+    transfer_parser.add_argument('--password', help='Contraseña para FTP (no necesaria para SCP)', default=None)
 
     @cmd2.with_argparser(transfer_parser)
     def do_transferir(self, args):  # comando: transferir
         """Ejecuta una transferencia por FTP o SCP y la registra."""
         try:
             if args.method == 'ftp':
-                # Código para FTP
                 self.poutput(f"Transfiriendo {args.source} a {args.destination} vía FTP...")
-                # Aquí agregarías la lógica para transferir por FTP usando ftplib
+                try:
+                    with FTP(args.host) as ftp:
+                        ftp.login(args.user, args.password)
+                        with open(args.source, 'rb') as file:
+                            ftp.storbinary(f'STOR {args.destination}', file)
+                    self.registrar_transferencia('FTP', args.source, args.destination, 'Éxito')
+                    self.poutput(f"Transferencia FTP completada: {args.source} -> {args.host}/{args.destination}")
+                except Exception as e:
+                    self.registrar_transferencia('FTP', args.source, args.destination, f'Error: {e}')
+                    self.perror(f"Error en la transferencia FTP: {e}")
+
             elif args.method == 'scp':
-                # Código para SCP
                 self.poutput(f"Transfiriendo {args.source} a {args.destination} vía SCP...")
-                subprocess.run(['scp', args.source, args.destination], check=True)
-
-            # Registrar la transferencia
-            with open(TRANSFERENCIAS_LOG, 'a') as log:
-                log.write(f"Transferencia {args.method.upper()}: {args.source} -> {args.destination}\n")
-
-            self.poutput("Transferencia completada y registrada.")
+                try:
+                    subprocess.run(['scp', args.source, f"{args.user}@{args.host}:{args.destination}"], check=True)
+                    self.registrar_transferencia('SCP', args.source, args.destination, 'Éxito')
+                    self.poutput(f"Transferencia SCP completada: {args.source} -> {args.user}@{args.host}:{args.destination}")
+                except subprocess.CalledProcessError as e:
+                    self.registrar_transferencia('SCP', args.source, args.destination, f'Error: {e}')
+                    self.perror(f"Error en la transferencia SCP: {e}")
         except Exception as e:
             self.perror(f"Error en la transferencia: {e}")
+
+    def registrar_transferencia(self, metodo, source, destination, resultado):
+        """Registra la transferencia en el archivo de log."""
+        from datetime import datetime
+        with open(TRANSFERENCIAS_LOG, 'a') as log:
+            log.write(f"[{datetime.now()}] {metodo}: {source} -> {destination} | Resultado: {resultado}\n")
+
+    #--------------------------------------------------------------------------------------------------------------- 
 
 
 if __name__ == '__main__':
